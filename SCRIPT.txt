@@ -1,0 +1,89 @@
+This file contains the Singular script used in the study
+"Symbolyc-numeric and classic-quantum hybrid computation of Hartree-Fock equations" by Ichio Kikuchi, Akihito Kikuchi
+
+
+(1) The script defines the ring Q[x,y,e,R] 
+where
+ (x,y) : the wave function
+ e     : orbital energy
+ R     : The bond length
+ with degree reverse lexicographic monomial ordering.
+
+(2) It generates the polynomial ideal (I) from the objective function OBJ. 
+
+(3) It computes the standard basis (SI) of the ideal I.
+
+(4) It transforms (SI) to the standard basis (j) in the lexicographic monomial ordering. 
+
+(5) It solves the system of polynomial equations by the triangulation. 
+
+(6) It generates the transformation matrices (mx,my,me,mr) 
+for x, y, e, R in Q[x,y,e,R]/I and write them in text files. 
+
+----(Singular Script)---------------------------------------
+
+LIB "solve.lib";option(redSB);
+ring r1=0,(x,y,e,R),dp;
+poly OBJ=-2*e*(10000*x**2 + 9016*x*y + 10000*y**2 - 10000) + 13071*x**4 + 17494*x**3*y + 19208*x**2*y**2 - 53057*x**2 + 12474*x*y**3 - 53899*x*y + 7746*y**4 - 34640*y**2 + 13670;
+list diffs;
+for(int i=1;i<=nvars(r1); i=i+1){diffs=insert(diffs,diff(OBJ,var(i)));}
+poly fR=100*R-146;
+ideal I=fR;
+for(int i=1;i<=nvars(r1)-1; i=i+1){I=I+diff(OBJ,var(i));}
+ideal SI=std(I);
+ring s=0,(x,y,e,R),lp;
+setring s;
+ideal j=fglm(r1,SI);
+def RS=triang_solve(j,10);
+setring RS;rlist;LIB "rootsmr.lib";setring r1;ideal b = qbase(SI);
+matrix mx = matmult(x,b,SI);
+matrix my = matmult(y,b,SI);
+matrix me = matmult(e,b,SI);
+matrix mr = matmult(R,b,SI);
+write(":w save_mx.txt",string(mx));
+write(":w save_my.txt",string(my));
+write(":w save_me.txt",string(me));
+write(":w save_mr.txt",string(mr));
+write(":w save_b.txt",string(b));
+quit;
+
+----(Singular Script)---------------------------------------
+
+
+The matrix data are read and transformed to Python numpy arrays.
+
+----(Python Script)---------------------------------------
+
+import numpy as np
+import csv
+def getmat(filename):
+    rowmx=list()
+    with open(filename, 'r') as file:
+        reader = csv.reader(file)
+        for t in reader:
+            #print(t)
+            rowmx.append(t)
+    x=rowmx[0]
+    y=np.array([eval(t) for t in x])
+    return np.array(np.array_split(y,8))
+
+mx=getmat('save_mx.txt')    
+my=getmat('save_my.txt')    
+me=getmat('save_me.txt')    
+mx=mx.transpose()
+my=my.transpose()
+me=me.transpose()
+
+ee,ww=np.linalg.eig(mx)
+vv=ww.transpose()
+
+LE=list()
+for v in vv:
+    LE2=[np.dot(v.conj().transpose(),np.dot(A,v)) for A in [mx,my,me]]
+    LE.append(LE2)
+    
+import pandas as pd
+DFL=pd.DataFrame(LE,columns=["(i|mx|i)","(i|my|i)","(i|me|i)",])
+print(DFL)
+
+----(Python Script)---------------------------------------
